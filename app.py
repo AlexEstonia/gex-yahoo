@@ -6,7 +6,7 @@ import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 import plotly.graph_objects as go
 from scipy.stats import norm
-import requests
+from curl_cffi import requests  # ИЗМЕНЕНИЕ: используем специальную либу для обхода блокировок
 
 # Настройка страницы
 st.set_page_config(page_title="Sigma HFT | Risk Radar", layout="wide", initial_sidebar_state="collapsed")
@@ -41,16 +41,12 @@ def calculate_greeks(S, K, T, r, sigma, opt_type):
     delta = np.where(opt_type == 'call', norm.cdf(d1), norm.cdf(d1) - 1)
     return gamma, delta
 
-# Критически важный декоратор. Обеспечивает выживание под нагрузкой.
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_and_calculate_backend(ticker_symbol="^SPX", depth=1):
     sys_time_ny = pd.Timestamp.now(tz='America/New_York').strftime('%H:%M:%S')
     
-    # Обход блокировки Yahoo (маскировка сессии под браузер)
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    })
+    # ИЗМЕНЕНИЕ: Подмена TLS-отпечатков. Имитируем браузер Google Chrome.
+    session = requests.Session(impersonate="chrome")
     
     # 1. Сбор базового актива
     ticker = yf.Ticker(ticker_symbol, session=session)
@@ -103,13 +99,12 @@ def fetch_and_calculate_backend(ticker_symbol="^SPX", depth=1):
 
 # --- БЛОК ОТОБРАЖЕНИЯ (Фронтенд) ---
 
-# Параметры фиксированы для максимальной скорости (0DTE, SPX)
 current_ticker = "^SPX"
 
 raw_df, ticker_spot, ticker_open, ticker_prev, fetch_time_ny = fetch_and_calculate_backend(ticker_symbol=current_ticker, depth=1)
 
 if raw_df.empty:
-    st.warning("Нет ликвидности, ожидание данных RTH или IP облака всё ещё в жестком бане у Yahoo...")
+    st.warning("Нет ликвидности, ожидание данных RTH или IP облака всё ещё в бане...")
     st.stop()
 
 # Агрегация уровней
@@ -132,7 +127,7 @@ col3.metric("Dealer Magnet", f"{dealer_magnet:.1f}")
 col4.metric("Gamma Flip", f"{gamma_flip:.1f}")
 
 # Отрисовка профиля
-range_val = 100  # Фиксированный зум для интрадея
+range_val = 100  
 min_y = ticker_spot - range_val
 max_y = ticker_spot + range_val
 mask = (gex_profile['strike'] >= min_y) & (gex_profile['strike'] <= max_y)
