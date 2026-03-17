@@ -6,6 +6,7 @@ import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 import plotly.graph_objects as go
 from scipy.stats import norm
+import requests
 
 # Настройка страницы
 st.set_page_config(page_title="Sigma HFT | Risk Radar", layout="wide", initial_sidebar_state="collapsed")
@@ -45,8 +46,14 @@ def calculate_greeks(S, K, T, r, sigma, opt_type):
 def fetch_and_calculate_backend(ticker_symbol="^SPX", depth=1):
     sys_time_ny = pd.Timestamp.now(tz='America/New_York').strftime('%H:%M:%S')
     
+    # Обход блокировки Yahoo (маскировка сессии под браузер)
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    })
+    
     # 1. Сбор базового актива
-    ticker = yf.Ticker(ticker_symbol)
+    ticker = yf.Ticker(ticker_symbol, session=session)
     try:
         hist_daily = ticker.history(period="5d")
         hist_1m = ticker.history(period="1d", interval="1m")
@@ -102,7 +109,7 @@ current_ticker = "^SPX"
 raw_df, ticker_spot, ticker_open, ticker_prev, fetch_time_ny = fetch_and_calculate_backend(ticker_symbol=current_ticker, depth=1)
 
 if raw_df.empty:
-    st.warning("Нет ликвидности или ожидание данных RTH...")
+    st.warning("Нет ликвидности, ожидание данных RTH или IP облака всё ещё в жестком бане у Yahoo...")
     st.stop()
 
 # Агрегация уровней
